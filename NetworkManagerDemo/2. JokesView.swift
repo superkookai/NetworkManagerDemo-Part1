@@ -23,12 +23,13 @@ struct Joke:Identifiable, Codable {
 }
 
 struct JokesView: View {
-    @State private var jokes: [Joke]? = nil
+    @State private var jokes: [Joke] = []
+    @State private var networkError: NetworkError? = nil
     let networkManager = NetworkManager.shared
     
     var body: some View {
         Group {
-            if let jokes {
+            if !jokes.isEmpty {
                 List(jokes.shuffled()) { joke in
                     VStack(alignment: .leading, spacing: 6) {
                         Text(joke.setup)
@@ -43,8 +44,30 @@ struct JokesView: View {
             }
         }
         .task {
-            jokes = await networkManager.fetchAndDecodeJSON(from: TestURL.jokesURL)
+            do {
+                jokes = try await networkManager.fetchAndDecodeJSON(from: TestURL.jokesURL)
+            } catch let error as NetworkError {
+                networkError = error
+            } catch {
+                print("DEBUG: Error \(error.localizedDescription)")
+            }
         }
+        .alert(
+            "Unable to load Jokes",
+            isPresented: Binding(get: {
+                networkError != nil
+            }, set: { value in
+                if !value {
+                    networkError = nil
+                }
+            }),
+            presenting: networkError) { _ in
+                Button("OK") {
+                    
+                }
+            } message: { networkError in
+                Text(networkError.userMessage)
+            }
     }
 }
 

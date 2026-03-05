@@ -24,6 +24,7 @@ struct QuotePlus: Decodable {
 
 struct Quotes2View: View {
     @State private var quotePlus: QuotePlus? = nil
+    @State private var networkError: NetworkError? = nil
     let networkManager = NetworkManager.shared
     
     var body: some View {
@@ -52,8 +53,30 @@ struct Quotes2View: View {
             }
         }
         .task {
-            quotePlus = await networkManager.fetchAndDecodeJSON(from: TestURL.quotes2URL)
+            do {
+                quotePlus = try await networkManager.fetchAndDecodeJSON(from: TestURL.quotes2URL)
+            } catch let error as NetworkError {
+                networkError = error
+            } catch {
+                print("DEBUG: Error \(error.localizedDescription)")
+            }
         }
+        .alert(
+            "Unable to load Quotes",
+            isPresented: Binding(get: {
+                networkError != nil
+            }, set: { value in
+                if !value {
+                    networkError = nil
+                }
+            }),
+            presenting: networkError) { _ in
+                Button("OK") {
+                    
+                }
+            } message: { networkError in
+                Text(networkError.userMessage)
+            }
     }
 }
 
