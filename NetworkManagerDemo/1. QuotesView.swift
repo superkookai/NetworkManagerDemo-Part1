@@ -35,13 +35,11 @@ struct Quote: Decodable, Identifiable {
 import SwiftUI
 
 struct QuotesView: View {
-    @State private var quotes: [Quote] = []
-    @State private var networkError: NetworkError? = nil
-    let networkManager = NetworkManager.shared
+    @State private var viewModel = DataViewModel<[Quote]>(urlString: TestURL.quotesURL)
     
     var body: some View {
         Group {
-            if !quotes.isEmpty {
+            if let quotes = viewModel.data, !quotes.isEmpty {
                 List(quotes.shuffled()) { quote in
                     VStack(alignment: .leading, spacing: 6) {
                         Text(quote.text)
@@ -59,29 +57,30 @@ struct QuotesView: View {
                     .padding(.vertical, 4)
                 }
                 .listStyle(.plain)
+                .refreshable {
+                    Task {
+                        await viewModel.fetchData()
+                    }
+                }
             } else {
                 ContentUnavailableView("No Quotes available", systemImage: "quote.closing")
             }
         }
+        .withLoader(isLoading: viewModel.isLoading, title: "quotes")
         .task {
-            do {
-                quotes = try await networkManager.fetchAndDecodeJSON(from: TestURL.quotesURL)
-            } catch let error as NetworkError {
-                networkError = error
-            } catch {
-                print("DEBUG: Error \(error.localizedDescription)")
-            }
+            print("DEBUG: QuotesView task run")
+            await viewModel.fetchData()
         }
         .alert(
             "Unable to load Quotes",
             isPresented: Binding(get: {
-                networkError != nil
+                viewModel.networkError != nil
             }, set: { value in
                 if !value {
-                    networkError = nil
+                    viewModel.networkError = nil
                 }
             }),
-            presenting: networkError) { _ in
+            presenting: viewModel.networkError) { _ in
                 Button("OK") {
                     
                 }
@@ -98,3 +97,4 @@ struct QuotesView: View {
             .toolbarTitleDisplayMode(.inlineLarge)
     }
 }
+

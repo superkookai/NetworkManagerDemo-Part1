@@ -23,13 +23,11 @@ struct QuotePlus: Decodable {
 }
 
 struct Quotes2View: View {
-    @State private var quotePlus: QuotePlus? = nil
-    @State private var networkError: NetworkError? = nil
-    let networkManager = NetworkManager.shared
+    @State private var viewModel = DataViewModel<QuotePlus>(urlString: TestURL.quotes2URL)
     
     var body: some View {
         Group {
-            if let quotePlus {
+            if let quotePlus = viewModel.data {
                 Text(quotePlus.lastUpdated, format: .dateTime.month().day().year())
                 List(quotePlus.quotes.shuffled()) { quote in
                     VStack(alignment: .leading, spacing: 6) {
@@ -48,29 +46,29 @@ struct Quotes2View: View {
                     .padding(.vertical, 4)
                 }
                 .listStyle(.plain)
+                .refreshable {
+                    Task {
+                        await viewModel.fetchData()
+                    }
+                }
             } else {
                 ContentUnavailableView("No Quotes available", systemImage: "quote.closing")
             }
         }
+        .withLoader(isLoading: viewModel.isLoading, title: "quotes")
         .task {
-            do {
-                quotePlus = try await networkManager.fetchAndDecodeJSON(from: TestURL.quotes2URL)
-            } catch let error as NetworkError {
-                networkError = error
-            } catch {
-                print("DEBUG: Error \(error.localizedDescription)")
-            }
+            await viewModel.fetchData()
         }
         .alert(
             "Unable to load Quotes",
             isPresented: Binding(get: {
-                networkError != nil
+                viewModel.networkError != nil
             }, set: { value in
                 if !value {
-                    networkError = nil
+                    viewModel.networkError = nil
                 }
             }),
-            presenting: networkError) { _ in
+            presenting: viewModel.networkError) { _ in
                 Button("OK") {
                     
                 }

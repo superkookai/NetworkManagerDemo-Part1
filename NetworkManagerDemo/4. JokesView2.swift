@@ -23,13 +23,18 @@ struct Joke2:Identifiable, Codable {
 }
 
 struct JokesView2: View {
-    @State private var jokes: [Joke2] = []
-    @State private var networkError: NetworkError? = nil
-    let networkManager = NetworkManager.shared
+    @State private var viewModel = DataViewModel<[Joke2]>(urlString: TestURL.jokesURL) { decoder in
+        decoder.dateDecodingStrategy = .iso8601
+    }
+    
+    init() {
+        print("DEBUG: JokesView2 init")
+    }
     
     var body: some View {
         Group {
-            if !jokes.isEmpty {
+            if let jokes = viewModel.data, !jokes.isEmpty {
+                let _ = print("DEBUG: List run")
                 List(jokes.shuffled()) { joke in
                     VStack(alignment: .leading, spacing: 6) {
                         Text(joke.setup)
@@ -41,31 +46,31 @@ struct JokesView2: View {
                     .padding(.vertical, 4)
                 }
                 .listStyle(.plain)
+                .refreshable {
+                    Task {
+                        await viewModel.fetchData()
+                    }
+                }
             } else {
+                let _ = print("DEBUG: ContentUnavailableView run")
                 ContentUnavailableView("No Jokes available", systemImage: "hand.thumbsdown.fill")
             }
         }
+        .withLoader(isLoading: viewModel.isLoading, title: "jokes")
         .task {
-            do {
-                jokes = try await networkManager.fetchAndDecodeJSON(from: TestURL.jokesURL, configureDecoder: { decoder in
-                    decoder.dateDecodingStrategy = .iso8601
-                })
-            } catch let error as NetworkError {
-                networkError = error
-            } catch {
-                print("DEBUG: Error \(error.localizedDescription)")
-            }
+            print("DEBUG: .task run")
+            await viewModel.fetchData()
         }
         .alert(
             "Unable to load Jokes",
             isPresented: Binding(get: {
-                networkError != nil
+                viewModel.networkError != nil
             }, set: { value in
                 if !value {
-                    networkError = nil
+                    viewModel.networkError = nil
                 }
             }),
-            presenting: networkError) { _ in
+            presenting: viewModel.networkError) { _ in
                 Button("OK") {
                     
                 }
